@@ -1,0 +1,5 @@
+require("jelly.surround")
+require("jelly.remap")
+require("jelly.packer")
+require("jelly.set")
+require("jelly.autocmd")
