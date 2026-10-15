@@ -123,7 +123,7 @@ vim.opt.incsearch = true
 vim.opt.termguicolors = true
 vim.opt.scrolloff = 15
 vim.opt.sidescrolloff = 20
-vim.opt.colorcolumn = "120"
+vim.opt.colorcolumn = "80"
 vim.opt.cursorline = true
 vim.opt.showmatch = true
 
@@ -208,7 +208,7 @@ local function check_clang_comm(start_str, end_str)
 end
 
 -- This has to be improved, particularly with motions and without the use of < or >
-local function check_brackets(start_str, _)
+local function check_brackets(start_str)
     -- Special case because it's so common
     local token_list = {}
     local token_str_buf = ""
@@ -271,10 +271,18 @@ local function surround_helper(start_str, end_str)
         -- Getting positions of selection
         local start_pos = vim.api.nvim_buf_get_mark(curr_buf, "<")
         local end_pos = vim.api.nvim_buf_get_mark(curr_buf, ">")
+        -- Normalize selection
+        if start_pos[1] > end_pos[1] or (start_pos[1] == end_pos[1] and end_pos[2] < start_pos[2]) then
+            start_pos, end_pos = end_pos, start_pos
+        end
+        -- Get text
         local start_line, start_col = start_pos[1] - 1, start_pos[2]
         local end_line, end_col = end_pos[1] - 1, end_pos[2] + 1
-        -- Get text and surround it
         local lines = vim.api.nvim_buf_get_text(curr_buf, start_line, start_col, end_line, end_col, {})
+        -- Fix end_col in case is to the right of the last character
+        -- Occurs when user presses $
+        end_col = math.min(end_col, #vim.api.nvim_buf_get_lines(curr_buf, end_line, end_line + 1, false)[1])
+        -- Surround text
         lines[1] = start_str .. lines[1]
         lines[#lines] = lines[#lines] .. end_str
         vim.api.nvim_buf_set_text(curr_buf, start_line, start_col, end_line, end_col, lines)
@@ -292,12 +300,11 @@ local function surround_helper(start_str, end_str)
             -- %2 is the remaining string
             lines[i] = string.gsub(temp, "^(%s*)(%S)", "%1" .. start_str .. "%2") .. end_str
         end
-    elseif mode == "\22" then
+        -- No other mode exists besides <C-v>
+    else
         -- Apply before and after selection
         table.insert(lines, 1, start_str)
         table.insert(lines, end_str)
-    else
-        return
     end
     vim.api.nvim_buf_set_lines(curr_buf, start_line, end_line, false, lines)
 end
@@ -310,7 +317,7 @@ local function surround_general()
         return
     end
     local start_str, end_str
-    start_str, end_str = check_brackets(text_to_surround, text_to_surround)
+    start_str, end_str = check_brackets(text_to_surround)
     start_str, end_str = check_clang_comm(start_str, end_str)
     surround_helper(start_str, end_str)
 end
@@ -470,8 +477,20 @@ end
 
 -- TODO
 if vim.fn.executable("clangd") then
+    -- local config_dir = vim.fs.abspath(vim.fn.stdpath("config"))
+    -- local config_clang_format_path = vim.fs.joinpath(config_dir, ".clang_format")
+    -- vim.fn.writefile({
+    --     "IndentWidth: 4",
+    --     "ColumnLimit: 100"
+    -- }, config_clang_format_path, "s")
+    -- Configure and enable clangd lsp server
     vim.lsp.config["c"] = {
-        cmd = { "clangd" },
+        cmd = {
+            "clangd",
+            "--clang-tidy",
+            "--background-index",
+            "--fallback-style=webkit" -- Currently not possible to specify a file or inject clang-format config directly
+        },
         filetypes = { "c" }
     }
     vim.lsp.enable("c")
@@ -556,6 +575,7 @@ vim.keymap.set({ "n", "v" }, "<C-o>", "<C-o>zz", { noremap = true, silent = true
 vim.keymap.set({ "n", "v" }, "<C-i>", "<C-i>zz", { noremap = true, silent = true })
 vim.keymap.set({ "n" }, "n", "nzzzv", { noremap = true, silent = true })
 vim.keymap.set({ "n" }, "N", "Nzzzv", { noremap = true, silent = true })
+vim.keymap.set({ "n", "v" }, "G", "Gzzzv", { noremap = true, silent = true })
 
 -- Config
 vim.keymap.set({ "n" }, "<leader>C", function()
